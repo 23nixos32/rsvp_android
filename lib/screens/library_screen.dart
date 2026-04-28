@@ -33,15 +33,37 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _scanDir() async {
-    final result = await FilePicker.platform.getDirectoryPath();
-    if (result == null) return;
-    setState(() { _loading = true; _status = 'Scanning…'; });
-    final found    = await scanDir(result);
+    // Use pickFiles with epub extension — works reliably on all Android versions
+    // without any storage permissions via Android's Storage Access Framework
+    final result = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Select EPUB file(s)',
+      type: FileType.custom,
+      allowedExtensions: ['epub'],
+      allowMultiple: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    setState(() { _loading = true; _status = 'Adding books…'; });
+
     final existing = _library.map((b) => b['book_id']).toSet();
     int added = 0;
-    for (final book in found) {
-      if (!existing.contains(book['book_id'])) { _library.add(book); added++; }
+
+    for (final file in result.files) {
+      final path = file.path;
+      if (path == null) continue;
+      try {
+        final bookId = await getBookId(path);
+        if (existing.contains(bookId)) continue;
+        final parsed = await parseEpub(path);
+        _library.add({
+          'book_id':  bookId,
+          'filepath': path,
+          'title':    parsed.title,
+        });
+        existing.add(bookId);
+        added++;
+      } catch (_) { continue; }
     }
+
     await saveLibrary(_library);
     final bmarks = await loadAllBookmarks();
     if (mounted) setState(() {
