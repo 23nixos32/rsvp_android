@@ -11,20 +11,33 @@ List<SearchMatch> findMatches(List<String> tokens, String query) {
   final words = tokens.where((t) => t != paraMarker).toList();
   final qWords = query.toLowerCase().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
   if (qWords.isEmpty) return [];
+
   final wordPositions = <int>[];
   for (var i = 0; i < tokens.length; i++) {
     if (tokens[i] != paraMarker) wordPositions.add(i);
   }
+
+  final punct = RegExp(r'[.,;:!?]+');
+
   final matches = <SearchMatch>[];
   for (var wi = 0; wi <= words.length - qWords.length; wi++) {
-    final slice = words.sublist(wi, wi + qWords.length)
-        .map((w) => w.toLowerCase().replaceAll(RegExp(r'[.,;:!?"\']+'), '')).toList();
+    final slice = words
+        .sublist(wi, wi + qWords.length)
+        .map((w) => w.toLowerCase().replaceAll(punct, ''))
+        .toList();
     if (slice.join(' ') == qWords.join(' ')) {
-      final pre = [if (wi > 6) '…', ...words.sublist((wi-6).clamp(0,wi))].join(' ');
+      final preStart = (wi - 6).clamp(0, wi);
+      final pre = [
+        if (preStart > 0) '…',
+        ...words.sublist(preStart, wi),
+      ].join(' ');
       final mid = words.sublist(wi, wi + qWords.length).join(' ');
-      final end = wi + qWords.length;
-      final post = [...words.sublist(end, (end+6).clamp(0,words.length)),
-        if (end+6 < words.length) '…'].join(' ');
+      final endIdx = wi + qWords.length;
+      final postEnd = (endIdx + 6).clamp(0, words.length);
+      final post = [
+        ...words.sublist(endIdx, postEnd),
+        if (postEnd < words.length) '…',
+      ].join(' ');
       matches.add(SearchMatch(wordPositions[wi], pre, mid, post));
     }
   }
@@ -57,49 +70,73 @@ class _SearchScreenState extends State<SearchScreen> {
       backgroundColor: const Color(0xFF0d0d1a),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1a1a2e),
-        title: Text('"${widget.query}"', style: const TextStyle(color: Color(0xFF00b4d8), fontSize: 14),
-            overflow: TextOverflow.ellipsis),
+        title: Text(
+          '"${widget.query}"',
+          style: const TextStyle(color: Color(0xFF00b4d8), fontSize: 14),
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
       body: Column(children: [
-        Padding(padding: const EdgeInsets.all(12),
-          child: Text(_matches.isEmpty ? 'No matches found.'
-              : '${_matches.length} match(es) — tap to select, double-tap to jump',
-            style: const TextStyle(color: Colors.grey, fontSize: 13))),
-        Expanded(child: ListView.builder(
-          itemCount: _matches.length,
-          itemBuilder: (_, i) {
-            final m = _matches[i];
-            final sel = i == _selected;
-            return GestureDetector(
-              onTap: () => setState(() => _selected = i),
-              onDoubleTap: () => Navigator.pop(context, m.tokenIndex),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                color: sel ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
-                child: RichText(text: TextSpan(
-                  style: const TextStyle(color: Color(0xFFBEBEBE), fontSize: 14),
-                  children: [
-                    if (m.pre.isNotEmpty) TextSpan(text: '${m.pre} '),
-                    TextSpan(text: m.match, style: const TextStyle(
-                        color: Color(0xFFEBEBEB), fontWeight: FontWeight.bold)),
-                    if (m.post.isNotEmpty) TextSpan(text: ' ${m.post}'),
-                  ],
-                )),
-              ),
-            );
-          },
-        )),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Text(
+            _matches.isEmpty
+                ? 'No matches found.'
+                : '${_matches.length} match(es) — tap to select, double-tap to jump',
+            style: const TextStyle(color: Colors.grey, fontSize: 13),
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: _matches.length,
+            itemBuilder: (_, i) {
+              final m = _matches[i];
+              final sel = i == _selected;
+              return GestureDetector(
+                onTap: () => setState(() => _selected = i),
+                onDoubleTap: () => Navigator.pop(context, m.tokenIndex),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  color: sel ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+                  child: RichText(
+                    text: TextSpan(
+                      style: const TextStyle(color: Color(0xFFBEBEBE), fontSize: 14),
+                      children: [
+                        if (m.pre.isNotEmpty) TextSpan(text: '${m.pre} '),
+                        TextSpan(
+                          text: m.match,
+                          style: const TextStyle(
+                            color: Color(0xFFEBEBEB),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (m.post.isNotEmpty) TextSpan(text: ' ${m.post}'),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
         if (_matches.isNotEmpty)
-          SafeArea(child: Padding(padding: const EdgeInsets.all(12),
-            child: SizedBox(width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF00b4d8),
                     foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14)),
-                onPressed: () => Navigator.pop(context, _matches[_selected].tokenIndex),
-                child: const Text('Jump to selected match'),
-              )))),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: () => Navigator.pop(context, _matches[_selected].tokenIndex),
+                  child: const Text('Jump to selected match'),
+                ),
+              ),
+            ),
+          ),
       ]),
     );
   }
