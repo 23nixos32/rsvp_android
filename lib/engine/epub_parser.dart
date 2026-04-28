@@ -20,8 +20,8 @@ class ParsedBook {
 
 Future<ParsedBook> parseEpub(String filepath) async {
   final bytes = await File(filepath).readAsBytes();
-  final book = EpubReader.readBook(bytes);
-  final title = book.Title?.trim().isNotEmpty == true
+  final book = await EpubReader.readBook(bytes);
+  final title = (book.Title?.trim().isNotEmpty == true)
       ? book.Title! : filepath.split('/').last.replaceAll('.epub', '');
 
   final rawTokens = <String>[];
@@ -79,7 +79,7 @@ Future<List<Map<String, String>>> scanDir(String directory) async {
       try {
         final bookId = await getBookId(entity.path);
         final bytes = await entity.readAsBytes();
-        final book = EpubReader.readBook(bytes);
+        final book = await EpubReader.readBook(bytes);
         final t = book.Title?.trim() ?? '';
         results.add({'book_id': bookId, 'filepath': entity.path,
           'title': t.isNotEmpty ? t : entity.path.split('/').last});
