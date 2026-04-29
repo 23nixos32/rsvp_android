@@ -18,6 +18,22 @@ class ParsedBook {
   ParsedBook(this.title, this.tokens);
 }
 
+/// Remove soft hyphens and split mid-word hard hyphens into separate tokens.
+/// 'disc-concerted'      -> ['disc', 'concerted']
+/// 'chains-of-words'     -> ['chains', 'of', 'words']
+/// 'normal'              -> ['normal']
+/// Leading/trailing hyphens (punctuation) are left intact.
+List<String> _splitWord(String word) {
+  // Remove soft hyphens (U+00AD)
+  word = word.replaceAll('\u00AD', '');
+  // Only split on mid-word hyphens
+  if (word.length > 2 && word.substring(1, word.length - 1).contains('-')) {
+    final parts = word.split('-').where((p) => p.isNotEmpty).toList();
+    if (parts.length > 1) return parts;
+  }
+  return [word];
+}
+
 Future<ParsedBook> parseEpub(String filepath) async {
   final bytes = await File(filepath).readAsBytes();
   final book = await EpubReader.readBook(bytes);
@@ -62,30 +78,15 @@ void _processChapter(EpubChapter chapter, List<String> tokens) {
     walk(doc.body ?? doc.documentElement);
     for (final chunk in buffer.toString().split('\x01')) {
       final words = chunk.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
-      if (words.isNotEmpty) { tokens.addAll(words); tokens.add(paraMarker); }
+      if (words.isNotEmpty) {
+        for (final w in words) {
+          tokens.addAll(_splitWord(w));
+        }
+        tokens.add(paraMarker);
+      }
     }
   }
   for (final sub in chapter.SubChapters ?? []) _processChapter(sub, tokens);
 }
 
 int countWords(List<String> tokens) => tokens.where((t) => t != paraMarker).length;
-
-Future<List<Map<String, String>>> scanDir(String directory) async {
-  final results = <Map<String, String>>[];
-  final dir = Directory(directory);
-  if (!await dir.exists()) return results;
-  await for (final entity in dir.list(recursive: true)) {
-    if (entity is File && entity.path.toLowerCase().endsWith('.epub')) {
-      try {
-        final bookId = await getBookId(entity.path);
-        final bytes = await entity.readAsBytes();
-        final book = await EpubReader.readBook(bytes);
-        final t = book.Title?.trim() ?? '';
-        results.add({'book_id': bookId, 'filepath': entity.path,
-          'title': t.isNotEmpty ? t : entity.path.split('/').last});
-      } catch (_) { continue; }
-    }
-  }
-  results.sort((a, b) => (a['title'] ?? '').compareTo(b['title'] ?? ''));
-  return results;
-}
